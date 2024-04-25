@@ -20,4 +20,6 @@ jobs:
                   pnpm i
 
             - name: Build
-              run: node scripts/build.js
+              run: |
+                  cd scripts
+                  node build.js
