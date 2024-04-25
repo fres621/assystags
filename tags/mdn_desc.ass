@@ -1,0 +1,71 @@
+{js:
+    let txml = {tag:require|https://www.unpkg.com/txml@5.1.1/dist/txml.min.js};
+    {ignore:
+    (async() => {
+        let cbi = 0;
+        let def = (e,c,p,s) => p(e.children, c).join(s);
+        let rules = {
+            a: {
+                str(element, context, parse) {
+                    let href = element.attributes?.href;
+                    let url = href ? (
+                        href.startsWith('http') ? href :
+                        href.startsWith('/') ? context.domain + href :
+                        href.startsWith('#') ? context.page + href :
+                        href
+                    ) : null;
+                    return url ? `[${parse(element.children, context)}](<${url}>)` : parse(element.children, context);
+                }
+            },
+            p: {
+                str: (el, ctx, parse) => def(el, ctx, parse, ' '),
+            },
+            ol: {
+                str: (el, ctx, parse) => def(el, {
+                    ...ctx,
+                    m: '1. '
+                }, parse, '\n'),
+            },
+            ul: {
+                str: (el, ctx, parse) => def(el, {
+                    ...ctx,
+                    m: '- '
+                }, parse, '\n'),
+            },
+            li: {
+                str: (el, ctx, parse) => ctx.m + def(el, ctx, parse, ' '),
+            },
+            code: {
+                str: (el, ctx, parse) => '`' + def(el, ctx, parse, ' ') + '`',
+            },
+            div: {
+                str: (el, ctx, parse) => {
+                    if (el.attributes?.class === 'code-example') {
+                        // alternatively add keepWhitespaces option to txml.parse and stuff but i didnt know it existed so
+                        return 
+                            `${"```"}${el.children[0].children[0].children}\n${[...ctx.domstr.matchAll(/<pre[\s\S]*?<code>([\s\S]*?)<\/code>/g)][cbi++][1].replace(/<.*?>([\s\S]*?)<\/.*?>/g, (_, e)=>e)}${"```"}`;
+                    }
+                    return def(el, ctx, parse, ' ');
+                }
+            },
+            strong: {
+                str: (el, ctx, parse) => '**' + def(el, ctx, parse, ' ') + '**'
+            }
+        };
+        let parse = (c, ctx) => [
+            ...c.map(child => rules[child.tagName] ? rules[child.tagName].str(child, ctx, parse) : child).slice(0,7), 
+            ...(c.length > 7 ?[`…${c.length-5} more`]:[])
+        ];
+        txml = await txml;
+        let te = await fetch(args[0]).then(e=>e.text());
+        let parsed = txml.parse(te.substring(te.indexOf("<article>"), te.lastIndexOf("</article>")+10), { noChildNodes: ['meta','link','style','script','body', 'col'] });
+        let stuff = txml.filter(parsed, e=>e.attributes.class=="section-content")[0];
+        return 
+            '# ' + parse(txml.filter(parsed, e=>e.tagName=="h1")[0].children).join(' ') + '\n' 
+            + parse(stuff.children.slice(0,5), {
+                page: args[0],
+                domain: 'https://developer.mozilla.org/',
+                domstr: te,
+            }).join('\n');
+    })();
+}}
